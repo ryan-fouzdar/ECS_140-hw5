@@ -1,11 +1,16 @@
 package bug1
 
-// Counter stores a count.
+import "sync"
+
 type Counter struct {
-	n int64
+	n    int64
+	lock sync.Mutex 
 }
 
-// Inc increments the count in the Counter.
+
 func (c *Counter) Inc() {
+	c.lock.Lock()     
 	c.n++
+	c.lock.Unlock()   
 }
+
