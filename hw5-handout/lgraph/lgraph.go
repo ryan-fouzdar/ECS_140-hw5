@@ -34,15 +34,15 @@ func check(g LGraph, s, t node, seq []rune) bool {
 	return false
 }
 
-func find(g1, g2 LGraph, c, t node, k uint, s node, prefix []rune, result chan<- []rune, wg *sync.WaitGroup, mu *sync.Mutex, found *bool) {
+func find(g1, g2 LGraph, c, t node, k uint, s node, prefix []rune, result chan<- []rune, wg *sync.WaitGroup, lock *sync.Mutex, sequence *bool) {
 	defer wg.Done()
 
-	mu.Lock()
-	if *found {
-		mu.Unlock()
+	lock.Lock()
+	if *sequence {
+		lock.Unlock()
 		return
 	}
-	mu.Unlock()
+	lock.Unlock()
 
 	edges, exists := g1(c)
 	if !exists {
@@ -51,12 +51,12 @@ func find(g1, g2 LGraph, c, t node, k uint, s node, prefix []rune, result chan<-
 
 	if k == 0 {
 		if c == t && !check(g2, s, t, prefix) {
-			mu.Lock()
-			if !*found {
-				*found = true
+			lock.Lock()
+			if !*sequence {
+				*sequence = true
 				result <- prefix
 			}
-			mu.Unlock()
+			lock.Unlock()
 		}
 		return
 	}
@@ -64,32 +64,29 @@ func find(g1, g2 LGraph, c, t node, k uint, s node, prefix []rune, result chan<-
 	for _, e := range edges {
 		newPrefix := append([]rune{}, prefix...) 
 		newPrefix = append(newPrefix, e.label)
-
 		wg.Add(1)
-		go find(g1, g2, e.destination, t, k-1, s, newPrefix, result, wg, mu, found)
+		go find(g1, g2, e.destination, t, k-1, s, newPrefix, result, wg, lock, sequence)
 	}
 }
 
 // FindSequence searches for a sequence in g1 that doesn't exist in g2 concurrently.
 func FindSequence(g1, g2 LGraph, s, t node, k uint) ([]rune, bool) {
 	var wg sync.WaitGroup
-	result := make(chan []rune, 1) 
-	var mu sync.Mutex
-	found := false
+	result := make(chan []rune) 
+	var lock sync.Mutex
+	sequence := false
 
 	wg.Add(1)
-	go find(g1, g2, s, t, k, s, []rune{}, result, &wg, &mu, &found)
+	go find(g1, g2, s, t, k, s, []rune{}, result, &wg, &lock, &sequence)
 
 	go func() {
 		wg.Wait()
 		close(result)
 	}()
 
-	select {
-	case seq, ok := <-result:
-		if ok {
-			return seq, true
-		}
-		return nil, false
+	seq, ok := <-result
+	if ok {
+		return seq, true
 	}
+	return nil, false
 }
